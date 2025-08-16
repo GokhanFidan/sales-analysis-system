@@ -45,15 +45,21 @@ class SalesVisualizer:
             formats = formats or config.EXPORT_FORMATS
             
             for fmt in formats:
-                if fmt == 'png':
+                if fmt == 'png' and hasattr(fig, 'savefig'):
+                    # Matplotlib figure
                     fig.savefig(config.OUTPUT_DIR / f"{filename}.png", 
                                dpi=config.DPI, bbox_inches='tight', 
                                facecolor='white', edgecolor='none')
-                elif fmt == 'pdf':
+                elif fmt == 'pdf' and hasattr(fig, 'savefig'):
+                    # Matplotlib figure
                     fig.savefig(config.OUTPUT_DIR / f"{filename}.pdf", 
                                bbox_inches='tight', facecolor='white')
                 elif fmt == 'html' and hasattr(fig, 'write_html'):
+                    # Plotly figure
                     fig.write_html(config.OUTPUT_DIR / f"{filename}.html")
+                elif fmt == 'png' and hasattr(fig, 'write_image'):
+                    # Plotly figure to PNG
+                    fig.write_image(config.OUTPUT_DIR / f"{filename}.png")
                     
             self.logger.info(f"Plot saved: {filename}")
             
@@ -84,8 +90,10 @@ class SalesVisualizer:
             
             # 1. Revenue Trend
             monthly_revenue = df.groupby('Order_Month')['Sales'].sum()
+            month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+            month_labels = [month_names[i-1] for i in monthly_revenue.index]
             fig.add_trace(
-                go.Scatter(x=list(monthly_revenue.index), y=monthly_revenue.values,
+                go.Scatter(x=month_labels, y=monthly_revenue.values,
                           mode='lines+markers', name='Revenue Trend',
                           line=dict(color=self.colors['primary'], width=3)),
                 row=1, col=1
@@ -128,8 +136,9 @@ class SalesVisualizer:
             
             # 6. Monthly Growth
             monthly_growth = monthly_revenue.pct_change().fillna(0) * 100
+            growth_labels = [month_names[i-1] for i in monthly_growth.index]
             fig.add_trace(
-                go.Bar(x=list(monthly_growth.index), y=monthly_growth.values,
+                go.Bar(x=growth_labels, y=monthly_growth.values,
                       name='Monthly Growth %',
                       marker_color=np.where(monthly_growth.values >= 0, self.colors['primary'], self.colors['success'])),
                 row=2, col=3
@@ -137,10 +146,13 @@ class SalesVisualizer:
             
             # 7. Top Products
             top_products = df.groupby('Sub-Category')['Sales'].sum().nlargest(10)
+            # Format values in thousands
+            formatted_values = [f'${v/1000:.0f}K' for v in top_products.values]
             fig.add_trace(
                 go.Bar(y=top_products.index, x=top_products.values,
-                      orientation='h', name='Top Products',
-                      marker_color=self.colors['neutral']),
+                      orientation='h', name='Top Products (Sales $)',
+                      marker_color=self.colors['neutral'],
+                      text=formatted_values, textposition='auto'),
                 row=3, col=1
             )
             
@@ -181,7 +193,7 @@ class SalesVisualizer:
                     row=3, col=3
                 )
             
-            # Update layout
+            # Update layout with better axis labels
             fig.update_layout(
                 height=1200,
                 showlegend=False,
@@ -190,6 +202,19 @@ class SalesVisualizer:
                 title_font_size=24,
                 font=dict(size=10)
             )
+            
+            # Update x-axis labels
+            fig.update_xaxes(title_text="Month", row=1, col=1)
+            fig.update_yaxes(title_text="Revenue ($)", row=1, col=1)
+            
+            fig.update_xaxes(title_text="Month", row=2, col=3)
+            fig.update_yaxes(title_text="Growth Rate (%)", row=2, col=3)
+            
+            fig.update_xaxes(title_text="Sales ($)", row=3, col=1)
+            fig.update_yaxes(title_text="Sub-Category", row=3, col=1)
+            
+            fig.update_xaxes(title_text="Sales ($)", row=2, col=2)
+            fig.update_yaxes(title_text="Profit ($)", row=2, col=2)
             
             # Save dashboard
             self.save_plot(fig, 'executive_dashboard', ['html', 'png'])

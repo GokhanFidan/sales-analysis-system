@@ -85,6 +85,33 @@ pip install -r requirements.txt
 python main.py
 ```
 
+### 🔄 Using Different Datasets
+
+This system is designed to work with any retail/e-commerce dataset. The system automatically detects column names using flexible patterns:
+
+**Supported Column Patterns:**
+- **Sales/Revenue**: 'sales', 'revenue', 'amount', 'total', 'value'
+- **Profit**: 'profit', 'margin', 'income', 'earnings'
+- **Customer ID**: 'customer_id', 'customer', 'cust_id', 'client_id'
+- **Order Date**: 'date', 'order_date', 'purchase_date', 'transaction_date'
+- **Category**: 'category', 'product_category', 'type'
+- **Region**: 'region', 'location', 'area', 'zone'
+
+**To use your own dataset:**
+1. Place your CSV file in the `data/` directory
+2. Update the file path in `config.py`:
+   ```python
+   DATA_FILE = DATA_DIR / 'your_dataset.csv'
+   ```
+3. Run the analysis - the system will automatically detect column patterns
+
+**Minimum Required Columns:**
+- Sales/Revenue column
+- Date column  
+- Customer identifier
+
+The system will gracefully handle missing optional columns and provide warnings about unavailable analyses.
+
 ### Alternative Execution
 ```bash
 # For custom analysis workflows
@@ -99,9 +126,15 @@ analyzer.preprocess_data()
 "
 ```
 
-## 📊 Dataset Schema
+## 📊 Dataset Schema & Insights
 
+### Dataset Overview
 **Source**: Retail superstore sales data (`data/superstore.csv`)
+- **Period**: January 2014 - December 2017 (4 years)
+- **Records**: 9,994 transactions
+- **Customers**: 793 unique customers
+- **Orders**: 5,009 unique orders
+- **Geography**: 4 regions (Central, East, South, West)
 
 | Column | Type | Description | Business Impact |
 |--------|------|-------------|-----------------|
@@ -117,6 +150,56 @@ analyzer.preprocess_data()
 | Segment | String | Customer segment | Behavioral analysis |
 | Order Date | Date | Order timestamp | Temporal analysis |
 | Ship Date | Date | Shipping timestamp | Operations analysis |
+
+### 🔍 Key Business Insights Discovered
+
+#### Financial Performance
+- **Total Revenue**: $2.3M over 4 years
+- **Profit Margin**: 12.47% (industry benchmark varies 10-15%)
+- **Average Order Value**: $229.86
+- **Monthly Growth Rate**: 28.68% (highly volatile, suggests seasonal business)
+
+#### Customer Behavior Analysis
+- **Orders per Customer**: 6.3 (indicates good customer retention)
+- **Customer Segments**: 
+  - Champions (11.9%) - High value, frequent buyers
+  - At Risk (5.2%) - Require immediate retention efforts
+  - Others (43.9%) - Potential for segmentation refinement
+
+#### Operational Insights
+- **Average Shipping Time**: 4.0 days (efficient logistics)
+- **Top Product Categories**: Technology leads in revenue
+- **Regional Performance**: West region shows strongest performance
+- **Seasonal Patterns**: Clear monthly variations in sales
+
+#### Market Basket Analysis Findings
+- **42 Association Rules** discovered
+- Strong correlation between Storage → Binders & Paper (Lift: 1.242)
+- Cross-selling opportunities in office supplies category
+- Technology products often purchased independently
+
+#### Customer Segmentation Outcomes
+- **RFM Analysis**: Successfully segmented 793 customers into 9 distinct groups
+- **K-means Clustering**: Identified 4 behavioral clusters
+- **Retention Analysis**: Cohort analysis reveals customer lifecycle patterns
+- **Risk Assessment**: 41 customers identified as "at risk" requiring intervention
+
+### 🎯 Strategic Recommendations Based on Analysis
+
+#### Revenue Optimization
+1. **Focus on Technology Category**: Highest revenue generator
+2. **Regional Expansion**: Replicate West region success in other areas
+3. **Premium Customer Programs**: Leverage Champions segment (11.9%)
+
+#### Customer Retention
+1. **At-Risk Customer Campaign**: Target 41 at-risk customers immediately
+2. **Cross-Selling Strategy**: Implement Storage + Binders/Paper bundles
+3. **Seasonal Campaigns**: Align inventory with monthly growth patterns
+
+#### Operational Efficiency
+1. **Maintain Shipping Performance**: 4-day average is competitive
+2. **Inventory Management**: Use seasonal patterns for demand forecasting
+3. **Profit Margin Improvement**: Focus on 12.47% → 15% target
 
 ## 📈 Analysis Outputs
 

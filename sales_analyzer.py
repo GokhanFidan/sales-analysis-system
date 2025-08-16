@@ -47,6 +47,7 @@ class SalesAnalyzer:
         self.df = None
         self.processed_df = None
         self.customer_metrics = None
+        self.column_mapping = {}
         self.setup_logging()
         self.setup_plotting()
         
@@ -61,6 +62,40 @@ class SalesAnalyzer:
             ]
         )
         self.logger = logging.getLogger(__name__)
+        
+    def detect_column_mapping(self, columns) -> Dict[str, str]:
+        """Auto-detect column names for flexibility across different datasets"""
+        mapping = {}
+        
+        # Common patterns for column detection
+        patterns = {
+            'sales': ['sales', 'revenue', 'amount', 'total', 'value'],
+            'profit': ['profit', 'margin', 'income', 'earnings'],
+            'quantity': ['quantity', 'qty', 'units', 'count'],
+            'discount': ['discount', 'reduction', 'rebate'],
+            'date': ['date', 'order_date', 'purchase_date', 'transaction_date'],
+            'customer_id': ['customer_id', 'customer', 'cust_id', 'client_id'],
+            'order_id': ['order_id', 'transaction_id', 'invoice_id'],
+            'category': ['category', 'product_category', 'type'],
+            'sub_category': ['sub_category', 'subcategory', 'product_type'],
+            'region': ['region', 'location', 'area', 'zone'],
+            'segment': ['segment', 'customer_segment', 'group'],
+            'ship_date': ['ship_date', 'delivery_date', 'shipped_date']
+        }
+        
+        for col in columns:
+            col_lower = col.lower().replace(' ', '_').replace('-', '_')
+            for key, patterns_list in patterns.items():
+                if any(pattern in col_lower for pattern in patterns_list):
+                    mapping[key] = col
+                    break
+        
+        self.logger.info(f"Detected column mapping: {mapping}")
+        return mapping
+        
+    def get_column(self, column_type: str) -> str:
+        """Get actual column name for a given column type"""
+        return self.column_mapping.get(column_type)
         
     def setup_plotting(self):
         """Setup plotting style and configuration"""
@@ -77,12 +112,17 @@ class SalesAnalyzer:
                 
             self.df = pd.read_csv(self.data_path, encoding='latin1')
             
-            # Data validation
-            required_columns = ['Order ID', 'Customer ID', 'Sales', 'Profit', 'Order Date']
-            missing_columns = [col for col in required_columns if col not in self.df.columns]
+            # Auto-detect column names (flexible for different datasets)
+            self.column_mapping = self.detect_column_mapping(self.df.columns)
             
-            if missing_columns:
-                raise ValueError(f"Missing required columns: {missing_columns}")
+            # Validate essential columns
+            essential_columns = ['sales', 'date', 'customer_id']
+            missing_essential = [col for col in essential_columns if self.column_mapping.get(col) is None]
+            
+            if missing_essential:
+                self.logger.warning(f"Some essential columns not detected: {missing_essential}")
+                self.logger.info("Available columns: " + ", ".join(self.df.columns.tolist()))
+                # Continue with available columns
                 
             self.logger.info(f"Data loaded successfully. Shape: {self.df.shape}")
             return self.df
@@ -98,27 +138,47 @@ class SalesAnalyzer:
             
             df = self.df.copy()
             
-            # Date processing
-            df['Order Date'] = pd.to_datetime(df['Order Date'])
-            df['Ship Date'] = pd.to_datetime(df['Ship Date'])
+            # Date processing (flexible column names)
+            date_col = self.get_column('date') or 'Order Date'
+            ship_date_col = self.get_column('ship_date') or 'Ship Date'
             
-            # Feature engineering
-            df['Days_to_Ship'] = (df['Ship Date'] - df['Order Date']).dt.days
-            df['Profit_Margin'] = df['Profit'] / df['Sales']
-            df['Order_Year'] = df['Order Date'].dt.year
-            df['Order_Month'] = df['Order Date'].dt.month
-            df['Order_Quarter'] = df['Order Date'].dt.quarter
-            df['Day_of_Week'] = df['Order Date'].dt.day_name()
-            df['Month_Name'] = df['Order Date'].dt.month_name()
-            df['Is_Weekend'] = df['Order Date'].dt.weekday >= 5
+            if date_col in df.columns:
+                df['Order Date'] = pd.to_datetime(df[date_col])
+            if ship_date_col in df.columns:
+                df['Ship Date'] = pd.to_datetime(df[ship_date_col])
+            
+            # Feature engineering (with flexible column support)
+            sales_col = self.get_column('sales') or 'Sales'
+            profit_col = self.get_column('profit') or 'Profit'
+            quantity_col = self.get_column('quantity') or 'Quantity'
+            
+            # Create features if columns exist
+            if 'Ship Date' in df.columns and 'Order Date' in df.columns:
+                df['Days_to_Ship'] = (df['Ship Date'] - df['Order Date']).dt.days
+            
+            if sales_col in df.columns and profit_col in df.columns:
+                df['Profit_Margin'] = df[profit_col] / df[sales_col]
+            
+            if 'Order Date' in df.columns:
+                df['Order_Year'] = df['Order Date'].dt.year
+                df['Order_Month'] = df['Order Date'].dt.month
+                df['Order_Quarter'] = df['Order Date'].dt.quarter
+                df['Day_of_Week'] = df['Order Date'].dt.day_name()
+                df['Month_Name'] = df['Order Date'].dt.month_name()
+                df['Is_Weekend'] = df['Order Date'].dt.weekday >= 5
+            
+            # Additional business metrics
+            if sales_col in df.columns and quantity_col in df.columns:
+                df['Revenue_per_Quantity'] = df[sales_col] / df[quantity_col]
+            
+            discount_col = self.get_column('discount') or 'Discount'
+            if discount_col in df.columns and sales_col in df.columns:
+                df['Discount_Impact'] = df[discount_col] * df[sales_col]
             
             # Handle infinite and null values
             df = df.replace([np.inf, -np.inf], np.nan)
-            df['Profit_Margin'] = df['Profit_Margin'].fillna(0)
-            
-            # Add business metrics
-            df['Revenue_per_Quantity'] = df['Sales'] / df['Quantity']
-            df['Discount_Impact'] = df['Discount'] * df['Sales']
+            if 'Profit_Margin' in df.columns:
+                df['Profit_Margin'] = df['Profit_Margin'].fillna(0)
             
             self.processed_df = df
             self.logger.info("Data preprocessing completed")
@@ -167,8 +227,20 @@ class SalesAnalyzer:
     def analyze_correlations(self) -> pd.DataFrame:
         """Analyze correlations between numerical variables"""
         try:
-            numerical_cols = ['Sales', 'Quantity', 'Discount', 'Profit', 
+            # Get available numerical columns
+            potential_cols = ['Sales', 'Quantity', 'Discount', 'Profit', 
                             'Days_to_Ship', 'Profit_Margin', 'Revenue_per_Quantity']
+            
+            # Filter only existing columns with sufficient data
+            numerical_cols = []
+            for col in potential_cols:
+                if col in self.processed_df.columns:
+                    if self.processed_df[col].notna().sum() > 10:  # At least 10 non-null values
+                        numerical_cols.append(col)
+            
+            if len(numerical_cols) < 2:
+                self.logger.warning("Insufficient numerical columns for correlation analysis")
+                return pd.DataFrame()
             
             correlation_matrix = self.processed_df[numerical_cols].corr()
             
@@ -176,17 +248,24 @@ class SalesAnalyzer:
             significant_correlations = []
             for i, col1 in enumerate(numerical_cols):
                 for j, col2 in enumerate(numerical_cols[i+1:], i+1):
-                    corr, p_value = stats.pearsonr(
-                        self.processed_df[col1].dropna(), 
-                        self.processed_df[col2].dropna()
-                    )
-                    if p_value < config.SIGNIFICANCE_LEVEL:
-                        significant_correlations.append({
-                            'variable1': col1,
-                            'variable2': col2,
-                            'correlation': corr,
-                            'p_value': p_value
-                        })
+                    # Get data and ensure same length
+                    data1 = self.processed_df[col1].dropna()
+                    data2 = self.processed_df[col2].dropna()
+                    
+                    # Get common indices
+                    common_idx = data1.index.intersection(data2.index)
+                    if len(common_idx) > 10:  # Ensure sufficient data
+                        corr, p_value = stats.pearsonr(
+                            self.processed_df.loc[common_idx, col1], 
+                            self.processed_df.loc[common_idx, col2]
+                        )
+                        if p_value < config.SIGNIFICANCE_LEVEL:
+                            significant_correlations.append({
+                                'variable1': col1,
+                                'variable2': col2,
+                                'correlation': corr,
+                                'p_value': p_value
+                            })
             
             self.significant_correlations = pd.DataFrame(significant_correlations)
             return correlation_matrix
